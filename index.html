@@ -457,6 +457,36 @@
     background:none;border:1px solid var(--gasto);border-radius:20px;padding:6px 12px;cursor:pointer;
   }
   .config-reset-btn:hover{background:var(--gasto);color:#fff;}
+
+  .reset-overlay{
+    display:none;position:fixed;inset:0;background:rgba(15,20,26,.55);
+    align-items:center;justify-content:center;z-index:200;padding:20px;
+  }
+  .reset-overlay.abierto{display:flex;}
+  .reset-modal{
+    background:var(--surface);border-radius:14px;padding:22px;max-width:420px;width:100%;
+    box-shadow:0 12px 40px var(--sombra-flotante);max-height:88vh;overflow-y:auto;
+  }
+  .reset-modal-titulo{font-size:16px;font-weight:600;color:var(--ink);margin-bottom:4px;}
+  .reset-modal-nota{font-size:12px;color:var(--ink-soft);margin-bottom:16px;}
+  .reset-opcion{
+    display:flex;align-items:flex-start;gap:10px;padding:10px 8px;border-radius:8px;cursor:pointer;
+  }
+  .reset-opcion:hover{background:var(--acento-tenue);}
+  .reset-opcion input{margin-top:3px;flex-shrink:0;accent-color:var(--gasto);}
+  .reset-opcion strong{display:block;font-size:13px;color:var(--ink);font-weight:600;}
+  .reset-opcion small{display:block;font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .reset-modal-botones{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+  .reset-modal-cancelar{
+    font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-soft);
+    background:none;border:1px solid var(--line);border-radius:20px;padding:8px 16px;cursor:pointer;
+  }
+  .reset-modal-confirmar{
+    font-family:'JetBrains Mono',monospace;font-size:11px;color:#fff;
+    background:var(--gasto);border:1px solid var(--gasto);border-radius:20px;padding:8px 16px;cursor:pointer;
+  }
+  .reset-modal-confirmar:disabled{opacity:.5;cursor:not-allowed;}
+
   .sync-fila{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;}
   .sync-punto{width:8px;height:8px;border-radius:50%;background:var(--ink-faint);flex-shrink:0;}
   .sync-punto.activo{background:var(--ingreso);}
@@ -556,8 +586,54 @@
     </div>
     <div class="config-seccion">
       <div class="config-seccion-titulo">Datos</div>
-      <div class="config-reset-nota">Borra todos los movimientos, metas, capital inicial y configuración guardados en este navegador.</div>
-      <button class="config-reset-btn" type="button" onclick="restablecerTodosLosDatos()">Restablecer todos los datos</button>
+      <div class="config-reset-nota">Elige qué datos quieres borrar de este navegador.</div>
+      <button class="config-reset-btn" type="button" onclick="abrirModalReset()">Restablecer datos</button>
+    </div>
+  </div>
+
+  <div class="reset-overlay" id="reset-overlay">
+    <div class="reset-modal">
+      <div class="reset-modal-titulo">¿Qué quieres restablecer?</div>
+      <div class="reset-modal-nota">Marca uno o varios. Solo se borra lo seleccionado, y solo en este navegador.</div>
+      <label class="reset-opcion">
+        <input type="checkbox" value="capital">
+        <span>
+          <strong>Capital y movimientos</strong>
+          <small>Capital inicial y todo el historial de ingresos/gastos</small>
+        </span>
+      </label>
+      <label class="reset-opcion">
+        <input type="checkbox" value="metas">
+        <span>
+          <strong>Metas</strong>
+          <small>Metas de ahorro y su historial de aportes/retiros</small>
+        </span>
+      </label>
+      <label class="reset-opcion">
+        <input type="checkbox" value="categorias">
+        <span>
+          <strong>Categorías</strong>
+          <small>Restaura las categorías, colores y montos a los valores originales</small>
+        </span>
+      </label>
+      <label class="reset-opcion">
+        <input type="checkbox" value="config">
+        <span>
+          <strong>Moneda y ajustes</strong>
+          <small>Formato de moneda y otras preferencias generales</small>
+        </span>
+      </label>
+      <label class="reset-opcion">
+        <input type="checkbox" value="sync">
+        <span>
+          <strong>Sincronización (PIN)</strong>
+          <small>Desconecta este dispositivo del PIN de sincronización. No borra los datos en la nube</small>
+        </span>
+      </label>
+      <div class="reset-modal-botones">
+        <button type="button" class="reset-modal-cancelar" onclick="cerrarModalReset()">Cancelar</button>
+        <button type="button" class="reset-modal-confirmar" onclick="confirmarReset()">Borrar seleccionado</button>
+      </div>
     </div>
   </div>
 
@@ -1180,19 +1256,68 @@
     mostrarEstado('Categorías restauradas.', false);
   }
 
-  function restablecerTodosLosDatos(){
-    const confirmado = confirm('¿Estás seguro de restablecer todos los datos? Se borrarán todos los movimientos, metas, capital inicial y configuración guardados en este navegador. Esta acción no se puede deshacer.');
+  function abrirModalReset(){
+    document.getElementById('reset-overlay').classList.add('abierto');
+    document.querySelectorAll('.reset-opcion input[type="checkbox"]').forEach(function(cb){ cb.checked = false; });
+  }
+
+  function cerrarModalReset(){
+    document.getElementById('reset-overlay').classList.remove('abierto');
+  }
+
+  function confirmarReset(){
+    const marcadas = Array.from(document.querySelectorAll('.reset-opcion input[type="checkbox"]:checked')).map(function(cb){ return cb.value; });
+    if(marcadas.length === 0){
+      mostrarEstado('Marca al menos una opción para borrar.', true);
+      return;
+    }
+
+    const etiquetas = {
+      capital: 'Capital y movimientos',
+      metas: 'Metas',
+      categorias: 'Categorías',
+      config: 'Moneda y ajustes',
+      sync: 'Sincronización (PIN)'
+    };
+    const resumen = marcadas.map(function(k){ return etiquetas[k]; }).join(', ');
+    const confirmado = confirm('¿Estás seguro de borrar: ' + resumen + '? Esta acción no se puede deshacer.');
     if(!confirmado) return;
+
     try {
-      localStorage.removeItem(CONFIG_KEY);
-      localStorage.removeItem(CATEGORIAS_KEY);
-      localStorage.removeItem(CAPITAL_KEY);
-      localStorage.removeItem(METAS_KEY);
-      localStorage.removeItem(FIN_KEY);
+      if(marcadas.includes('capital')){
+        localStorage.removeItem(CAPITAL_KEY);
+        localStorage.removeItem(FIN_KEY);
+        capitalInicial = null;
+        movimientos = [];
+      }
+      if(marcadas.includes('metas')){
+        localStorage.removeItem(METAS_KEY);
+        metas = [];
+      }
+      if(marcadas.includes('categorias')){
+        localStorage.removeItem(CATEGORIAS_KEY);
+        categoriasState = categoriasPorDefecto();
+      }
+      if(marcadas.includes('config')){
+        localStorage.removeItem(CONFIG_KEY);
+        config = {moneda: 'universal', coloresCategorias: {}, montosCategorias: {}};
+      }
+      if(marcadas.includes('sync')){
+        if(typeof detenerSincronizacion === 'function') detenerSincronizacion();
+        localStorage.removeItem(SYNC_PIN_KEY);
+      }
     } catch (e) {
       mostrarEstado('No se pudieron borrar los datos en este navegador.', true);
       return;
     }
+
+    // Si la sincronización sigue activa con un PIN, empujamos ya el estado
+    // (con lo seleccionado vaciado) para que la nube quede al día y no
+    // revierta el borrado al recargar la página.
+    if(!marcadas.includes('sync') && syncActivo && typeof empujarEstadoCompleto === 'function'){
+      empujarEstadoCompleto();
+    }
+
     location.reload();
   }
 
